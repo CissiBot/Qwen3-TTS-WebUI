@@ -34,7 +34,7 @@ const PresetSelectorInner = <T extends Preset>({ presets, onSelect }: PresetSele
   }
 
   return (
-    <div className="flex items-center gap-1.5 mt-1">
+    <div className="flex items-center gap-1.5 pt-3">
       <div className="flex flex-wrap gap-1 flex-1">
         {presetButtons}
       </div>
