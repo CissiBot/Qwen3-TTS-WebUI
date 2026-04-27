@@ -699,6 +699,39 @@ async def list_speakers(request: Request, backend: str = "local"):
     return get_supported_speakers(backend)
 
 
+@router.get("/status")
+@limiter.limit("30/minute")
+async def get_tts_status(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+) -> dict[str, str | bool | None]:
+    model_manager = await ModelManager.get_instance()
+    model_key, tts = await model_manager.get_current_model()
+    display_model_key = model_key or "custom-voice"
+    model_name = ModelManager.MODEL_PATHS.get(display_model_key)
+    local_model_path = Path(settings.MODEL_BASE_PATH) / model_name if model_name else None
+
+    if model_name is None:
+        model_source = None
+        model_path = None
+    elif local_model_path is not None and local_model_path.exists():
+        model_source = "local"
+        model_path = str(local_model_path)
+    else:
+        model_source = "huggingface"
+        model_path = f"Qwen/{model_name}"
+
+    return {
+        "backend": "local",
+        "available": current_user.is_superuser or current_user.can_use_local_model,
+        "loaded": model_key is not None and tts is not None,
+        "model_key": model_key,
+        "model_name": model_name,
+        "model_path": model_path,
+        "model_source": model_source,
+    }
+
+
 @router.get("/languages")
 @limiter.limit("30/minute")
 async def list_languages(request: Request):

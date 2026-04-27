@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
     CUSTOM_VOICE: '/tts/custom-voice',
     VOICE_DESIGN: '/tts/voice-design',
     VOICE_CLONE: '/tts/voice-clone',
+    STATUS: '/tts/status',
   },
   JOBS: {
     LIST: '/jobs',

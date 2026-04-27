@@ -6,6 +6,16 @@ import type { UserCreateRequest, UserUpdateRequest, UserListResponse } from '@/t
 import type { VoiceDesign, VoiceDesignCreate, VoiceDesignListResponse } from '@/types/voice-design'
 import { API_ENDPOINTS, LANGUAGE_NAMES, SPEAKER_DESCRIPTIONS_ZH } from '@/lib/constants'
 
+export interface TTSStatus {
+  backend: 'local'
+  available: boolean
+  loaded: boolean
+  model_key: string | null
+  model_name: string | null
+  model_path: string | null
+  model_source: 'local' | 'huggingface' | null
+}
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 export const AUTH_DISABLED = import.meta.env.VITE_AUTH_DISABLED === 'true'
 export const LOCAL_AUTH_TOKEN = 'local-auth-disabled'
@@ -240,6 +250,11 @@ export const authApi = {
 }
 
 export const ttsApi = {
+  getStatus: async (): Promise<TTSStatus> => {
+    const response = await apiClient.get<TTSStatus>(API_ENDPOINTS.TTS.STATUS)
+    return response.data
+  },
+
   getLanguages: async (): Promise<Language[]> => {
     const response = await apiClient.get<string[]>(API_ENDPOINTS.TTS.LANGUAGES)
     return response.data.map((lang) => ({
