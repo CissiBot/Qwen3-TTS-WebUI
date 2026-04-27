@@ -536,6 +536,7 @@ async def create_voice_design_job(
 @limiter.limit("10/minute")
 async def create_voice_clone_job(
     request: Request,
+    background_tasks: BackgroundTasks,
     text: str = Form(...),
     language: str = Form(default="Auto"),
     ref_audio: Optional[UploadFile] = File(default=None),
@@ -549,7 +550,6 @@ async def create_voice_clone_job(
     top_p: Optional[float] = Form(default=1.0),
     repetition_penalty: Optional[float] = Form(default=1.05),
     backend: Optional[str] = Form(default=None),
-    background_tasks: BackgroundTasks | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -562,9 +562,6 @@ async def create_voice_clone_job(
     can_use_local = can_user_use_local_model(current_user)
 
     backend_type = backend or str(preferred_backend)
-
-    if background_tasks is None:
-        raise HTTPException(status_code=500, detail="Background task handler is unavailable")
 
     if backend_type == "local" and not can_use_local:
         raise HTTPException(
