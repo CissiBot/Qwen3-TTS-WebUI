@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { Navbar } from '@/components/Navbar'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { audiobookApi, type AudiobookProject, type AudiobookProjectDetail, type AudiobookCharacter, type AudiobookSegment } from '@/lib/api/audiobook'
-import apiClient, { formatApiError } from '@/lib/api'
+import apiClient, { API_BASE_URL, formatApiError } from '@/lib/api'
 
 function LazyAudioPlayer({ audioUrl, jobId }: { audioUrl: string; jobId: number }) {
   const [visible, setVisible] = useState(false)
@@ -156,11 +156,10 @@ function LogStream({ projectId, chapterId, active }: { projectId: number; chapte
     setDone(false)
 
     const token = localStorage.getItem('token')
-    const apiBase = (import.meta.env.VITE_API_URL as string) || ''
     const controller = new AbortController()
 
     const chapterParam = chapterId !== undefined ? `?chapter_id=${chapterId}` : ''
-    fetch(`${apiBase}/audiobook/projects/${projectId}/logs${chapterParam}`, {
+    fetch(`${API_BASE_URL}/audiobook/projects/${projectId}/logs${chapterParam}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     }).then(async res => {

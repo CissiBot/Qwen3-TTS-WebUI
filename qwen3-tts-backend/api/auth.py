@@ -14,25 +14,60 @@ from core.security import (
     decode_access_token
 )
 from db.database import get_db
-from db.crud import get_user_by_username, get_user_by_email, create_user, change_user_password, update_user_aliyun_key, get_user_preferences, update_user_preferences, can_user_use_local_model, update_user_llm_config
+from db.crud import get_user_by_username, get_user_by_email, create_user, create_user_by_admin, change_user_password, update_user_aliyun_key, get_user_preferences, update_user_preferences, can_user_use_local_model, update_user_llm_config
 from schemas.user import User, UserCreate, Token, PasswordChange, AliyunKeyUpdate, AliyunKeyVerifyResponse, UserPreferences, UserPreferencesResponse
 from schemas.audiobook import LLMConfigUpdate, LLMConfigResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 limiter = Limiter(key_func=get_remote_address)
 
+def get_or_create_auth_disabled_user(db: Session):
+    user = get_user_by_username(db, username="admin")
+    if user is None:
+        return create_user_by_admin(
+            db,
+            username="admin",
+            email="admin@example.com",
+            hashed_password=get_password_hash("auth-disabled-local-only"),
+            is_superuser=True,
+            can_use_local_model=True,
+        )
+
+    changed = False
+    if not getattr(user, "is_active", False):
+        setattr(user, "is_active", True)
+        changed = True
+    if not getattr(user, "is_superuser", False):
+        setattr(user, "is_superuser", True)
+        changed = True
+    if not getattr(user, "can_use_local_model", False):
+        setattr(user, "can_use_local_model", True)
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(user)
+
+    return user
+
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Session = Depends(get_db)
 ) -> User:
+    if settings.AUTH_DISABLED:
+        return get_or_create_auth_disabled_user(db)
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if token is None:
+        raise credentials_exception
 
     username = decode_access_token(token)
     if username is None:

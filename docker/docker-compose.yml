@@ -3,6 +3,7 @@ services:
     image: bdim404/qwen3-tts-backend:latest
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in docker/.env}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
       MODEL_DEVICE: ${MODEL_DEVICE:-cuda:0}
       MODEL_BASE_PATH: /app/Qwen
       DATABASE_URL: sqlite:////app/data/qwen_tts.db
@@ -17,6 +18,12 @@ services:
 
   frontend:
     image: bdim404/qwen3-tts-frontend:latest
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_AUTH_DISABLED: ${VITE_AUTH_DISABLED:-false}
     ports:
       - "80:80"
     depends_on:

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default="your-secret-key-change-this-in-production")
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
+    AUTH_DISABLED: bool = Field(default=False)
 
     DATABASE_URL: str = Field(default="sqlite:///./qwen_tts.db")
     CACHE_DIR: str = Field(default="./voice_cache")

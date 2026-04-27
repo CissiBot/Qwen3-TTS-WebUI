@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { authApi } from '@/lib/api'
+import { AUTH_DISABLED, LOCAL_AUTH_TOKEN, LOCAL_AUTH_USER, authApi } from '@/lib/api'
 import type { User, LoginRequest, AuthState } from '@/types/auth'
 
 interface AuthContextType extends AuthState {
@@ -14,20 +14,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation('auth')
-  const [token, setToken] = useState<string | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(() => AUTH_DISABLED ? LOCAL_AUTH_TOKEN : null)
+  const [user, setUser] = useState<User | null>(() => AUTH_DISABLED ? LOCAL_AUTH_USER : null)
+  const [isLoading, setIsLoading] = useState(!AUTH_DISABLED)
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (AUTH_DISABLED) {
+      localStorage.setItem('token', LOCAL_AUTH_TOKEN)
+      setToken(LOCAL_AUTH_TOKEN)
+      setUser(LOCAL_AUTH_USER)
+      setIsLoading(false)
+      return
+    }
+
     const initAuth = async () => {
       try {
         const storedToken = localStorage.getItem('token')
         if (storedToken) {
           setToken(storedToken)
-          const currentUser = await authApi.getCurrentUser()
-          setUser(currentUser)
         }
+
+        const currentUser = await authApi.getCurrentUser()
+        if (!storedToken) {
+          localStorage.setItem('token', LOCAL_AUTH_TOKEN)
+          setToken(LOCAL_AUTH_TOKEN)
+        }
+        setUser(currentUser)
       } catch (error) {
         localStorage.removeItem('token')
         setToken(null)
@@ -41,6 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (credentials: LoginRequest) => {
+    if (AUTH_DISABLED) {
+      localStorage.setItem('token', LOCAL_AUTH_TOKEN)
+      setToken(LOCAL_AUTH_TOKEN)
+      setUser(LOCAL_AUTH_USER)
+      navigate('/')
+      return
+    }
+
     try {
       const response = await authApi.login(credentials)
       const newToken = response.access_token
@@ -54,13 +75,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.success(t('loginSuccess'))
       navigate('/')
     } catch (error: any) {
-      const message = error.response?.data?.detail || t('loginFailedCheckCredentials')
+      const message = error.response?.data?.detail || error.message || t('loginFailedCheckCredentials')
       toast.error(message)
       throw error
     }
   }
 
   const logout = () => {
+    if (AUTH_DISABLED || token === LOCAL_AUTH_TOKEN) {
+      toast.info('本地免登录模式已启用，无需退出登录')
+      navigate('/')
+      return
+    }
+
     localStorage.removeItem('token')
     setToken(null)
     setUser(null)
@@ -74,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         user,
         isLoading,
-        isAuthenticated: !!token && !!user,
+        isAuthenticated: AUTH_DISABLED || (!!token && !!user),
         login,
         logout,
       }}

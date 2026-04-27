@@ -6,6 +6,10 @@ COPY qwen3-tts-frontend/package*.json ./
 RUN npm ci
 
 COPY qwen3-tts-frontend/ .
+ARG VITE_API_URL=/api
+ARG VITE_AUTH_DISABLED=false
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_AUTH_DISABLED=$VITE_AUTH_DISABLED
 RUN npm run build
 
 FROM nginx:alpine

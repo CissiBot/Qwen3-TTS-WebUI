@@ -13,7 +13,7 @@ import { Globe2, User, Type, Sparkles, Play, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { IconLabel } from '@/components/IconLabel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ttsApi, jobApi, voiceDesignApi } from '@/lib/api'
+import { API_BASE_URL, ttsApi, jobApi, voiceDesignApi } from '@/lib/api'
 import { useJobPolling } from '@/hooks/useJobPolling'
 import { useHistoryContext } from '@/contexts/HistoryContext'
 import { useUserPreferences } from '@/contexts/UserPreferencesContext'
@@ -186,8 +186,7 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
           formData.append('backend', 'local')
 
           const token = localStorage.getItem('token')
-          const baseURL = import.meta.env.VITE_API_URL || ''
-          const response = await fetch(`${baseURL}/tts/voice-clone`, {
+          const response = await fetch(`${API_BASE_URL}/tts/voice-clone`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,

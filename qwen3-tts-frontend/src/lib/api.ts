@@ -6,8 +6,21 @@ import type { UserCreateRequest, UserUpdateRequest, UserListResponse } from '@/t
 import type { VoiceDesign, VoiceDesignCreate, VoiceDesignListResponse } from '@/types/voice-design'
 import { API_ENDPOINTS, LANGUAGE_NAMES, SPEAKER_DESCRIPTIONS_ZH } from '@/lib/constants'
 
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+export const AUTH_DISABLED = import.meta.env.VITE_AUTH_DISABLED === 'true'
+export const LOCAL_AUTH_TOKEN = 'local-auth-disabled'
+export const LOCAL_AUTH_USER: User = {
+  id: 1,
+  username: 'admin',
+  email: 'admin@example.com',
+  is_active: true,
+  is_superuser: true,
+  can_use_local_model: true,
+  created_at: '1970-01-01T00:00:00.000Z',
+}
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -28,7 +41,7 @@ const isTrustedApiRequest = (url?: string, baseURL?: string): boolean => {
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
-  if (token && isTrustedApiRequest(config.url, config.baseURL || import.meta.env.VITE_API_URL)) {
+  if (token && isTrustedApiRequest(config.url, config.baseURL || API_BASE_URL)) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
@@ -159,7 +172,7 @@ export const formatApiError = (error: any): string => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+    if (!AUTH_DISABLED && error.response?.status === 401 && window.location.pathname !== '/login') {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
@@ -359,7 +372,7 @@ export const jobApi = {
   getAudioUrl: (id: number, audioPath?: string): string => {
     if (audioPath) {
       if (audioPath.startsWith('http')) {
-        const apiBase = import.meta.env.VITE_API_URL
+        const apiBase = API_BASE_URL
         if (apiBase) {
           try {
             const audioOrigin = new URL(audioPath).origin
