@@ -234,7 +234,7 @@ async def analyze_project(project_id: int, user: User, db: Session, turbo: bool 
         crud.delete_audiobook_segments(db, project_id)
         crud.delete_audiobook_characters(db, project_id)
 
-        backend_type = user.user_preferences.get("default_backend", "aliyun") if user.user_preferences else "aliyun"
+        backend_type = user.user_preferences.get("default_backend", "local") if user.user_preferences else "local"
 
         for char_data in characters_data:
             name = char_data.get("name", "narrator")
@@ -529,7 +529,7 @@ async def generate_project(project_id: int, user: User, db: Session, chapter_ind
         from core.tts_service import TTSServiceFactory
         from core.security import decrypt_api_key
 
-        backend_type = user.user_preferences.get("default_backend", "aliyun") if user.user_preferences else "aliyun"
+        backend_type = user.user_preferences.get("default_backend", "local") if user.user_preferences else "local"
 
         user_api_key = None
         if backend_type == "aliyun" and user.aliyun_api_key:
@@ -819,7 +819,7 @@ async def generate_character_preview(project_id: int, char_id: int, user: User, 
     from core.tts_service import TTSServiceFactory
     from core.security import decrypt_api_key
 
-    backend_type = user.user_preferences.get("default_backend", "aliyun") if user.user_preferences else "aliyun"
+    backend_type = user.user_preferences.get("default_backend", "local") if user.user_preferences else "local"
     user_api_key = None
     if backend_type == "aliyun" and user.aliyun_api_key:
         user_api_key = decrypt_api_key(user.aliyun_api_key)

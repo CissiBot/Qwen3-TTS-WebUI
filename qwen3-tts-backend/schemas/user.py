@@ -123,10 +123,10 @@ class AliyunKeyVerifyResponse(BaseModel):
     message: str
 
 class UserPreferences(BaseModel):
-    default_backend: str = Field(default="aliyun", pattern="^(local|aliyun)$")
+    default_backend: str = Field(default="local", pattern="^(local|aliyun)$")
     onboarding_completed: bool = Field(default=False)
 
 class UserPreferencesResponse(BaseModel):
-    default_backend: str = Field(default="aliyun", pattern="^(local|aliyun)$")
+    default_backend: str = Field(default="local", pattern="^(local|aliyun)$")
     onboarding_completed: bool = Field(default=False)
-    available_backends: list[str] = Field(default=["aliyun"])
+    available_backends: list[str] = Field(default=["local"])

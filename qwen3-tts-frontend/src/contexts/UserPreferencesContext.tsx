@@ -60,7 +60,7 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
       } else {
         const browserLang = detectBrowserLanguage()
         loadFontsForLanguage(browserLang)
-        setPreferences({ default_backend: 'aliyun', onboarding_completed: false })
+        setPreferences({ default_backend: 'local', onboarding_completed: false })
       }
     } finally {
       setIsLoading(false)
@@ -91,7 +91,7 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
 
   const isBackendAvailable = (backend: string) => {
     if (!preferences?.available_backends) {
-      return backend === 'aliyun'
+      return backend === 'local'
     }
     return preferences.available_backends.includes(backend)
   }

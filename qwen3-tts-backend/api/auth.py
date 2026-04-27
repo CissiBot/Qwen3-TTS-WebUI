@@ -286,10 +286,10 @@ async def get_preferences(
 
     available_backends = ["aliyun"]
     if can_user_use_local_model(current_user):
-        available_backends.append("local")
+        available_backends.insert(0, "local")
 
     return {
-        "default_backend": prefs.get("default_backend", "aliyun"),
+        "default_backend": prefs.get("default_backend", "local"),
         "onboarding_completed": prefs.get("onboarding_completed", False),
         "available_backends": available_backends
     }

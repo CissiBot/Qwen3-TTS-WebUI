@@ -347,7 +347,7 @@ async def create_custom_voice_job(
     from db.crud import get_user_preferences, can_user_use_local_model
 
     user_prefs = get_user_preferences(db, current_user.id)
-    preferred_backend = user_prefs.get("default_backend", "aliyun")
+    preferred_backend = user_prefs.get("default_backend", "local")
 
     can_use_local = can_user_use_local_model(current_user)
 
@@ -436,7 +436,7 @@ async def create_voice_design_job(
     from db.crud import get_user_preferences, can_user_use_local_model, get_voice_design, update_voice_design_usage
 
     user_prefs = get_user_preferences(db, current_user.id)
-    preferred_backend = user_prefs.get("default_backend", "aliyun")
+    preferred_backend = user_prefs.get("default_backend", "local")
 
     can_use_local = can_user_use_local_model(current_user)
 
@@ -557,7 +557,7 @@ async def create_voice_clone_job(
     from db.crud import get_user_preferences, can_user_use_local_model, get_voice_design
 
     user_prefs = get_user_preferences(db, current_user.id)
-    preferred_backend = user_prefs.get("default_backend", "aliyun")
+    preferred_backend = user_prefs.get("default_backend", "local")
 
     can_use_local = can_user_use_local_model(current_user)
 

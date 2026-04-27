@@ -238,7 +238,7 @@ def delete_cache_entry(db: Session, cache_id: int, user_id: int) -> bool:
 def get_user_preferences(db: Session, user_id: int) -> dict:
     user = get_user_by_id(db, user_id)
     if not user or not user.user_preferences:
-        return {"default_backend": "aliyun", "onboarding_completed": False}
+        return {"default_backend": "local", "onboarding_completed": False}
     return user.user_preferences
 
 def update_user_preferences(db: Session, user_id: int, preferences: dict) -> Optional[User]:

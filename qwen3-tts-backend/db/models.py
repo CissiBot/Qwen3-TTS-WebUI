@@ -40,7 +40,7 @@ class User(Base):
     llm_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     can_use_local_model: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    user_preferences: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=lambda: {"default_backend": "aliyun", "onboarding_completed": False})
+    user_preferences: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=lambda: {"default_backend": "local", "onboarding_completed": False})
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
