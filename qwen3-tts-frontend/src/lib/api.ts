@@ -36,6 +36,12 @@ const apiClient = axios.create({
   },
 })
 
+const appendCacheKey = (url: string, cacheKey?: string): string => {
+  if (!cacheKey) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}v=${encodeURIComponent(cacheKey)}`
+}
+
 const isTrustedApiRequest = (url?: string, baseURL?: string): boolean => {
   if (!url) return false
   if (url.startsWith('/')) return true
@@ -384,7 +390,9 @@ export const jobApi = {
     await apiClient.delete(API_ENDPOINTS.JOBS.DELETE(id))
   },
 
-  getAudioUrl: (id: number, audioPath?: string): string => {
+  getAudioUrl: (id: number, audioPath?: string, cacheKey?: string): string => {
+    const fallbackUrl = appendCacheKey(API_ENDPOINTS.JOBS.AUDIO(id), cacheKey)
+
     if (audioPath) {
       if (audioPath.startsWith('http')) {
         const apiBase = API_BASE_URL
@@ -393,22 +401,23 @@ export const jobApi = {
             const audioOrigin = new URL(audioPath).origin
             const apiOrigin = new URL(apiBase, window.location.origin).origin
             if (audioOrigin !== apiOrigin) {
-              return API_ENDPOINTS.JOBS.AUDIO(id)
+              return fallbackUrl
             }
           } catch {
-            return API_ENDPOINTS.JOBS.AUDIO(id)
+            return fallbackUrl
           }
         }
         if (audioPath.includes('localhost') || audioPath.includes('127.0.0.1')) {
           const url = new URL(audioPath)
-          return url.pathname
+          return appendCacheKey(url.pathname, cacheKey)
         }
-        return API_ENDPOINTS.JOBS.AUDIO(id)
+        return fallbackUrl
       } else {
-        return audioPath.startsWith('/') ? audioPath : `/${audioPath}`
+        const path = audioPath.startsWith('/') ? audioPath : `/${audioPath}`
+        return appendCacheKey(path, cacheKey)
       }
     } else {
-      return API_ENDPOINTS.JOBS.AUDIO(id)
+      return fallbackUrl
     }
   },
 }

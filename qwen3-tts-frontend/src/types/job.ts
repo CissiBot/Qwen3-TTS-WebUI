@@ -7,7 +7,9 @@ export interface Job {
   type: JobType
   status: JobStatus
   created_at: string
-  updated_at: string
+  updated_at?: string
+  started_at?: string
+  completed_at?: string
   error_message?: string
   audio_url?: string
   download_url?: string

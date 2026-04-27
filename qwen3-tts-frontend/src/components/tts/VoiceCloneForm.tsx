@@ -70,7 +70,7 @@ function VoiceCloneForm() {
     max_new_tokens: 2048
   })
 
-  const { currentJob, isPolling, isCompleted, startPolling, elapsedTime } = useJobPolling()
+  const { currentJob, isPolling, isCompleted, startPolling, stopPolling, elapsedTime } = useJobPolling()
   const { refresh } = useHistoryContext()
 
   const {
@@ -96,6 +96,10 @@ function VoiceCloneForm() {
       repetition_penalty: 1.05,
     } as Partial<FormData>,
   })
+
+  const textValue = watch('text')
+  const languageValue = watch('language')
+  const refTextValue = watch('ref_text')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -126,6 +130,7 @@ function VoiceCloneForm() {
   }
 
   const onSubmit = async (data: FormData) => {
+    stopPolling()
     setIsLoading(true)
     try {
       const result = await ttsApi.createVoiceCloneJob({
@@ -144,10 +149,22 @@ function VoiceCloneForm() {
     }
   }
 
+  const previewMatchesCurrentInput = useMemo(() => {
+    if (!currentJob) return false
+    const params = currentJob.parameters || {}
+    return params.text === textValue
+      && (params.language || 'Auto') === (languageValue || 'Auto')
+      && (params.ref_text || '') === (refTextValue || '')
+  }, [currentJob, textValue, languageValue, refTextValue])
+
   const memoizedAudioUrl = useMemo(() => {
-    if (!currentJob) return ''
-    return jobApi.getAudioUrl(currentJob.id, currentJob.audio_url)
-  }, [currentJob])
+    if (!currentJob || !previewMatchesCurrentInput) return ''
+    return jobApi.getAudioUrl(
+      currentJob.id,
+      currentJob.audio_url,
+      currentJob.completed_at || currentJob.updated_at || currentJob.created_at
+    )
+  }, [currentJob, previewMatchesCurrentInput])
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -417,7 +434,7 @@ function VoiceCloneForm() {
 
       {isPolling && <LoadingState elapsedTime={elapsedTime} />}
 
-      {isCompleted && currentJob && (
+      {isCompleted && currentJob && memoizedAudioUrl && (
         <div className="space-y-4 pt-4 border-t">
           <AudioPlayer
             audioUrl={memoizedAudioUrl}

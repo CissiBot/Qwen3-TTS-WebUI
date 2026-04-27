@@ -9,9 +9,7 @@ from slowapi.util import get_remote_address
 
 from core.database import get_db
 from core.config import settings
-from core.security import decode_access_token
 from db.models import Job, JobStatus, User
-from db.crud import get_user_by_username
 from api.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -20,37 +18,21 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 limiter = Limiter(key_func=get_remote_address)
 
 
-async def get_user_from_bearer_token(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> User:
-    auth_token = None
+def resolve_job_output_path(output_path: str) -> Path | None:
+    output_dir = Path(settings.OUTPUT_DIR).resolve()
+    raw_path = Path(output_path)
+    candidates = [raw_path]
 
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        auth_token = auth_header.split(" ")[1]
+    if not raw_path.is_absolute():
+        candidates.append(output_dir / raw_path.name)
+        candidates.append(output_dir / raw_path)
 
-    if not auth_token:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing authentication token"
-        )
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(output_dir):
+            return resolved
 
-    username = decode_access_token(auth_token)
-    if username is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    user = get_user_by_username(db, username=username)
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    return user
+    return None
 
 
 @router.get("/{job_id}")
@@ -71,8 +53,8 @@ async def get_job(
 
     download_url = None
     if job.status == JobStatus.COMPLETED and job.output_path:
-        output_file = Path(job.output_path)
-        if output_file.exists():
+        output_file = resolve_job_output_path(job.output_path)
+        if output_file is not None and output_file.exists():
             download_url = f"/jobs/{job.id}/download"
 
     return {
@@ -114,8 +96,8 @@ async def list_jobs(
     for job in jobs:
         download_url = None
         if job.status == JobStatus.COMPLETED and job.output_path:
-            output_file = Path(job.output_path)
-            if output_file.exists():
+            output_file = resolve_job_output_path(job.output_path)
+            if output_file is not None and output_file.exists():
                 download_url = f"/jobs/{job.id}/download"
 
         jobs_data.append({
@@ -155,11 +137,9 @@ async def delete_job(
 
     output_file = None
     if job.output_path:
-        output_file = Path(job.output_path).resolve()
-        output_dir = Path(settings.OUTPUT_DIR).resolve()
-        if not output_file.is_relative_to(output_dir):
-            logger.warning(f"Skip deleting file outside output dir: {output_file}")
-            output_file = None
+        output_file = resolve_job_output_path(job.output_path)
+        if output_file is None:
+            logger.warning(f"Skip deleting file outside output dir: {job.output_path}")
 
     if output_file:
         if output_file.exists():
@@ -180,7 +160,7 @@ async def delete_job(
 async def download_job_output(
     request: Request,
     job_id: int,
-    current_user: User = Depends(get_user_from_bearer_token),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -197,14 +177,13 @@ async def download_job_output(
     if not job.output_path:
         raise HTTPException(status_code=404, detail="Output file not found")
 
-    output_file = Path(job.output_path)
+    output_file = resolve_job_output_path(job.output_path)
+    if output_file is None:
+        logger.warning(f"Path traversal attempt detected: {job.output_path}")
+        raise HTTPException(status_code=403, detail="Access denied")
+
     if not output_file.exists():
         raise HTTPException(status_code=404, detail="Output file does not exist")
-
-    output_dir = Path(settings.OUTPUT_DIR).resolve()
-    if not output_file.resolve().is_relative_to(output_dir):
-        logger.warning(f"Path traversal attempt detected: {output_file}")
-        raise HTTPException(status_code=403, detail="Access denied")
 
     return FileResponse(
         path=str(output_file),

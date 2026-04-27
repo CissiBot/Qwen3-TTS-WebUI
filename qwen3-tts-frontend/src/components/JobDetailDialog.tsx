@@ -63,7 +63,9 @@ const JobDetailDialog = memo(({ job, open, onOpenChange }: JobDetailDialogProps)
   }
 
   const canPlay = job.status === 'completed'
-  const audioUrl = canPlay ? jobApi.getAudioUrl(job.id, job.audio_url) : ''
+  const audioUrl = canPlay
+    ? jobApi.getAudioUrl(job.id, job.audio_url, job.completed_at || job.updated_at || job.created_at)
+    : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

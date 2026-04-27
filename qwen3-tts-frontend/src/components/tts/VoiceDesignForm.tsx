@@ -69,7 +69,7 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
   const [saveDesignName, setSaveDesignName] = useState('')
   const [isPreparing, setIsPreparing] = useState(false)
 
-  const { currentJob, isPolling, isCompleted, startPolling, elapsedTime } = useJobPolling()
+  const { currentJob, isPolling, isCompleted, startPolling, stopPolling, elapsedTime } = useJobPolling()
   const { refresh } = useHistoryContext()
   const { preferences } = useUserPreferences()
 
@@ -92,6 +92,10 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
       repetition_penalty: 1.05,
     },
   })
+
+  const textValue = watch('text')
+  const languageValue = watch('language')
+  const instructValue = watch('instruct')
 
   useImperativeHandle(ref, () => ({
     loadParams: (params: any) => {
@@ -119,6 +123,7 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
   }, [t])
 
   const onSubmit = async (data: FormData) => {
+    stopPolling()
     setIsLoading(true)
     try {
       const result = await ttsApi.createVoiceDesignJob(data)
@@ -175,10 +180,22 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
     }
   }
 
+  const previewMatchesCurrentInput = useMemo(() => {
+    if (!currentJob) return false
+    const params = currentJob.parameters || {}
+    return params.text === textValue
+      && params.language === languageValue
+      && params.instruct === instructValue
+  }, [currentJob, textValue, languageValue, instructValue])
+
   const memoizedAudioUrl = useMemo(() => {
-    if (!currentJob) return ''
-    return jobApi.getAudioUrl(currentJob.id, currentJob.audio_url)
-  }, [currentJob])
+    if (!currentJob || !previewMatchesCurrentInput) return ''
+    return jobApi.getAudioUrl(
+      currentJob.id,
+      currentJob.audio_url,
+      currentJob.completed_at || currentJob.updated_at || currentJob.created_at
+    )
+  }, [currentJob, previewMatchesCurrentInput])
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-2">
@@ -451,7 +468,7 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
 
       {isPolling && <LoadingState elapsedTime={elapsedTime} />}
 
-      {isCompleted && currentJob && (
+      {isCompleted && currentJob && memoizedAudioUrl && (
         <div className="space-y-4 pt-4 border-t">
           <AudioPlayer
             audioUrl={memoizedAudioUrl}

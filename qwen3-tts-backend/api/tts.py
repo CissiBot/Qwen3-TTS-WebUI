@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 from core.config import settings
 from core.database import get_db
 from core.model_manager import ModelManager
+from core.tts_service import TTSServiceFactory
 from core.cache_manager import VoiceCacheManager
 from db.models import Job, JobStatus, User
 from schemas.tts import CustomVoiceRequest, VoiceDesignRequest
@@ -82,7 +83,7 @@ async def process_custom_voice_job(
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"{user_id}_{job_id}_{timestamp}.wav"
-        output_path = Path(settings.OUTPUT_DIR) / filename
+        output_path = (Path(settings.OUTPUT_DIR) / filename).resolve()
 
         with open(output_path, 'wb') as f:
             f.write(audio_bytes)
@@ -147,7 +148,7 @@ async def process_voice_design_job(
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"{user_id}_{job_id}_{timestamp}.wav"
-        output_path = Path(settings.OUTPUT_DIR) / filename
+        output_path = (Path(settings.OUTPUT_DIR) / filename).resolve()
 
         with open(output_path, 'wb') as f:
             f.write(audio_bytes)
@@ -307,7 +308,7 @@ async def process_voice_clone_job(
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"{user_id}_{job_id}_{timestamp}.wav"
-        output_path = Path(settings.OUTPUT_DIR) / filename
+        output_path = (Path(settings.OUTPUT_DIR) / filename).resolve()
 
         with open(output_path, 'wb') as f:
             f.write(audio_bytes)
@@ -705,8 +706,10 @@ async def get_tts_status(
     request: Request,
     current_user: User = Depends(get_current_user)
 ) -> dict[str, str | bool | None]:
-    model_manager = await ModelManager.get_instance()
-    model_key, tts = await model_manager.get_current_model()
+    local_backend = await TTSServiceFactory.get_backend("local")
+    health = await local_backend.health_check()
+    raw_model_key = health.get("current_model")
+    model_key = raw_model_key if isinstance(raw_model_key, str) else None
     display_model_key = model_key or "custom-voice"
     model_name = ModelManager.MODEL_PATHS.get(display_model_key)
     local_model_path = Path(settings.MODEL_BASE_PATH) / model_name if model_name else None
@@ -724,7 +727,7 @@ async def get_tts_status(
     return {
         "backend": "local",
         "available": current_user.is_superuser or current_user.can_use_local_model,
-        "loaded": model_key is not None and tts is not None,
+        "loaded": model_key is not None,
         "model_key": model_key,
         "model_name": model_name,
         "model_path": model_path,

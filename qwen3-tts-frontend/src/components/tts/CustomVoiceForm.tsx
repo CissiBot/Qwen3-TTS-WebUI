@@ -70,7 +70,7 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
     repetition_penalty: 1.05
   })
 
-  const { currentJob, isPolling, isCompleted, startPolling, elapsedTime } = useJobPolling()
+  const { currentJob, isPolling, isCompleted, startPolling, stopPolling, elapsedTime } = useJobPolling()
   const { refresh } = useHistoryContext()
   const { preferences } = useUserPreferences()
 
@@ -101,6 +101,11 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
       repetition_penalty: 1.05,
     },
   })
+
+  const textValue = watch('text')
+  const languageValue = watch('language')
+  const speakerValue = watch('speaker')
+  const instructValue = watch('instruct')
 
   useImperativeHandle(ref, () => ({
     loadParams: (params: any) => {
@@ -170,6 +175,7 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
 
 
   const onSubmit = async (data: FormData) => {
+    stopPolling()
     setIsLoading(true)
     try {
       const selectedItem = unifiedSpeakers.find(s => s.id === selectedSpeakerId)
@@ -231,10 +237,29 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
     }
   }
 
+  const previewMatchesCurrentInput = useMemo(() => {
+    if (!currentJob) return false
+    const params = currentJob.parameters || {}
+    const matchesSpeaker = selectedSpeaker?.source === 'saved-design'
+      ? params.voice_design_id === selectedSpeaker.designId || params.saved_design_id === selectedSpeaker.designId
+      : params.speaker === speakerValue
+    const matchesInstruct = selectedSpeaker?.source === 'saved-design'
+      || (params.instruct || '') === (instructValue || '')
+
+    return params.text === textValue
+      && params.language === languageValue
+      && matchesSpeaker
+      && matchesInstruct
+  }, [currentJob, textValue, languageValue, speakerValue, instructValue, selectedSpeaker])
+
   const memoizedAudioUrl = useMemo(() => {
-    if (!currentJob) return ''
-    return jobApi.getAudioUrl(currentJob.id, currentJob.audio_url)
-  }, [currentJob])
+    if (!currentJob || !previewMatchesCurrentInput) return ''
+    return jobApi.getAudioUrl(
+      currentJob.id,
+      currentJob.audio_url,
+      currentJob.completed_at || currentJob.updated_at || currentJob.created_at
+    )
+  }, [currentJob, previewMatchesCurrentInput])
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-2">
@@ -536,7 +561,7 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
 
       {isPolling && <LoadingState elapsedTime={elapsedTime} />}
 
-      {isCompleted && currentJob && (
+      {isCompleted && currentJob && memoizedAudioUrl && (
         <div className="space-y-4 pt-4 border-t">
           <AudioPlayer
             audioUrl={memoizedAudioUrl}
