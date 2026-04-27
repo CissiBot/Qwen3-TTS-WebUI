@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
@@ -22,7 +22,7 @@ export default function UserManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setIsLoading(true)
       const response = await userApi.listUsers()
@@ -32,11 +32,11 @@ export default function UserManagement() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [t])
 
   useEffect(() => {
     loadUsers()
-  }, [])
+  }, [loadUsers])
 
   const handleCreateUser = () => {
     setSelectedUser(null)

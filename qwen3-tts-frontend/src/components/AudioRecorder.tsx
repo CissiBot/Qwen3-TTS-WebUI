@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Mic, Trash2, RotateCcw, FileAudio } from 'lucide-react'
@@ -33,13 +33,7 @@ export function AudioRecorder({ onChange }: AudioRecorderProps) {
     }
   }, [recorderError])
 
-  useEffect(() => {
-    if (audioBlob) {
-      handleValidateRecording(audioBlob)
-    }
-  }, [audioBlob])
-
-  const handleValidateRecording = async (blob: Blob) => {
+  const handleValidateRecording = useCallback(async (blob: Blob) => {
     const file = new File([blob], 'recording.wav', { type: 'audio/wav' })
 
     const result = await validateAudioFile(file)
@@ -60,7 +54,13 @@ export function AudioRecorder({ onChange }: AudioRecorderProps) {
       clearRecording()
       onChange(null)
     }
-  }
+  }, [clearRecording, onChange, recordingDuration, t, validateAudioFile])
+
+  useEffect(() => {
+    if (audioBlob) {
+      handleValidateRecording(audioBlob)
+    }
+  }, [audioBlob, handleValidateRecording])
 
   const handleMouseDown = () => {
     if (!isRecording && !audioBlob) {

@@ -61,10 +61,11 @@ function SequentialPlayer({
 
   useEffect(() => {
     const audio = audioRef.current
+    const blobUrls = blobUrlsRef.current
     return () => {
       audio.pause()
       audio.src = ''
-      Object.values(blobUrlsRef.current).forEach(url => URL.revokeObjectURL(url))
+      Object.values(blobUrls).forEach(url => URL.revokeObjectURL(url))
     }
   }, [])
 
@@ -147,8 +148,6 @@ function LogStream({ projectId, chapterId, active }: { projectId: number; chapte
   const [lines, setLines] = useState<string[]>([])
   const [done, setDone] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const activeRef = useRef(active)
-  activeRef.current = active
 
   useEffect(() => {
     if (!active) return

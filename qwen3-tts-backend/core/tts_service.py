@@ -1,47 +1,99 @@
 import asyncio
 import functools
+import importlib
 import time
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from types import ModuleType
+from typing import Any, Optional, Protocol, cast
 import websockets
 import json
 import base64
 
 logger = logging.getLogger(__name__)
 
+TTSParams = dict[str, Any]
+TTSResult = tuple[bytes, int]
+HealthStatus = dict[str, Any]
+
+
+class ModelManagerProtocol(Protocol):
+    current_model_name: Optional[str]
+
+    async def load_model(self, model_name: str) -> None:
+        ...
+
+    async def get_current_model(self) -> tuple[Optional[str], Any]:
+        ...
+
+
+class ModelManagerFactoryProtocol(Protocol):
+    async def get_instance(self) -> ModelManagerProtocol:
+        ...
+
+
+class SettingsProtocol(Protocol):
+    ALIYUN_MODEL_FLASH: str
+    ALIYUN_MODEL_VC: str
+    ALIYUN_MODEL_VD: str
+    DEFAULT_BACKEND: str
+    ALIYUN_REGION: str
+
+
+def _get_settings() -> SettingsProtocol:
+    module = importlib.import_module("core.config")
+    return cast(SettingsProtocol, module.settings)
+
+
+def _get_model_manager_class() -> ModelManagerFactoryProtocol:
+    module = importlib.import_module("core.model_manager")
+    return cast(ModelManagerFactoryProtocol, module.ModelManager)
+
+
+def _get_process_ref_audio():
+    module = cast(ModuleType, importlib.import_module("utils.audio"))
+    return module.process_ref_audio
+
 
 class TTSBackend(ABC):
     @abstractmethod
-    async def generate_custom_voice(self, params: dict) -> Tuple[bytes, int]:
+    async def generate_custom_voice(self, params: TTSParams) -> TTSResult:
         pass
 
     @abstractmethod
-    async def generate_voice_design(self, params: dict) -> Tuple[bytes, int]:
+    async def generate_voice_design(self, params: TTSParams) -> TTSResult:
         pass
 
     @abstractmethod
-    async def generate_voice_clone(self, params: dict, ref_audio_bytes: bytes) -> Tuple[bytes, int]:
+    async def generate_voice_clone(self, params: TTSParams, ref_audio_bytes: Optional[bytes] = None) -> TTSResult:
         pass
 
     @abstractmethod
-    async def health_check(self) -> dict:
+    async def health_check(self) -> HealthStatus:
         pass
 
 
 class LocalTTSBackend(TTSBackend):
     def __init__(self):
-        self.model_manager = None
+        self.model_manager: Optional[ModelManagerProtocol] = None
         # Add a lock to prevent concurrent VRAM contention and CUDA errors on local GPU models
-        self._gpu_lock = asyncio.Lock()
+        self._gpu_lock: asyncio.Lock = asyncio.Lock()
 
     async def initialize(self):
-        from core.model_manager import ModelManager
+        ModelManager = _get_model_manager_class()
         self.model_manager = await ModelManager.get_instance()
 
-    async def generate_custom_voice(self, params: dict) -> Tuple[bytes, int]:
-        await self.model_manager.load_model("custom-voice")
-        _, tts = await self.model_manager.get_current_model()
+    def _require_model_manager(self) -> ModelManagerProtocol:
+        if self.model_manager is None:
+            raise RuntimeError("Local TTS backend is not initialized")
+        return self.model_manager
+
+    async def generate_custom_voice(self, params: TTSParams) -> TTSResult:
+        model_manager = self._require_model_manager()
+        await model_manager.load_model("custom-voice")
+        _, tts = await model_manager.get_current_model()
+        if tts is None:
+            raise RuntimeError("Failed to load custom-voice model")
 
         loop = asyncio.get_event_loop()
         async with self._gpu_lock:
@@ -61,14 +113,16 @@ class LocalTTSBackend(TTSBackend):
                 )
             )
 
-        import numpy as np
         wavs, sample_rate = result if isinstance(result, tuple) else (result, 24000)
         audio_data = wavs[0] if isinstance(wavs, list) else wavs
         return self._numpy_to_bytes(audio_data), sample_rate
 
-    async def generate_voice_design(self, params: dict) -> Tuple[bytes, int]:
-        await self.model_manager.load_model("voice-design")
-        _, tts = await self.model_manager.get_current_model()
+    async def generate_voice_design(self, params: TTSParams) -> TTSResult:
+        model_manager = self._require_model_manager()
+        await model_manager.load_model("voice-design")
+        _, tts = await model_manager.get_current_model()
+        if tts is None:
+            raise RuntimeError("Failed to load voice-design model")
 
         loop = asyncio.get_event_loop()
         async with self._gpu_lock:
@@ -87,16 +141,23 @@ class LocalTTSBackend(TTSBackend):
                 )
             )
 
-        import numpy as np
         wavs, sample_rate = result if isinstance(result, tuple) else (result, 24000)
         audio_data = wavs[0] if isinstance(wavs, list) else wavs
         return self._numpy_to_bytes(audio_data), sample_rate
 
-    async def generate_voice_clone(self, params: dict, ref_audio_bytes: bytes = None, x_vector=None) -> Tuple[bytes, int]:
-        from utils.audio import process_ref_audio
+    async def generate_voice_clone(
+        self,
+        params: TTSParams,
+        ref_audio_bytes: Optional[bytes] = None,
+        x_vector: Any = None,
+    ) -> TTSResult:
+        process_ref_audio = _get_process_ref_audio()
 
-        await self.model_manager.load_model("base")
-        _, tts = await self.model_manager.get_current_model()
+        model_manager = self._require_model_manager()
+        await model_manager.load_model("base")
+        _, tts = await model_manager.get_current_model()
+        if tts is None:
+            raise RuntimeError("Failed to load base model")
 
         loop = asyncio.get_event_loop()
 
@@ -138,14 +199,14 @@ class LocalTTSBackend(TTSBackend):
             audio_data = np.array(audio_data)
         return self._numpy_to_bytes(audio_data), sample_rate
 
-    async def health_check(self) -> dict:
+    async def health_check(self) -> HealthStatus:
         return {
             "available": self.model_manager is not None,
             "current_model": self.model_manager.current_model_name if self.model_manager else None
         }
 
     @staticmethod
-    def _numpy_to_bytes(audio_array) -> bytes:
+    def _numpy_to_bytes(audio_array: Any) -> bytes:
         import numpy as np
         import io
         import wave
@@ -186,8 +247,8 @@ class AliyunTTSBackend(TTSBackend):
         else:
             return "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
 
-    async def generate_custom_voice(self, params: dict) -> Tuple[bytes, int]:
-        from core.config import settings
+    async def generate_custom_voice(self, params: TTSParams) -> TTSResult:
+        settings = _get_settings()
 
         voice = self._map_speaker(params['speaker'])
         model = settings.ALIYUN_MODEL_FLASH
@@ -199,8 +260,8 @@ class AliyunTTSBackend(TTSBackend):
             language=params['language']
         )
 
-    async def generate_voice_design(self, params: dict, saved_voice_id: Optional[str] = None) -> Tuple[bytes, int]:
-        from core.config import settings
+    async def generate_voice_design(self, params: TTSParams, saved_voice_id: Optional[str] = None) -> TTSResult:
+        settings = _get_settings()
 
         if saved_voice_id:
             voice_id = saved_voice_id
@@ -220,8 +281,11 @@ class AliyunTTSBackend(TTSBackend):
             language=params['language']
         )
 
-    async def generate_voice_clone(self, params: dict, ref_audio_bytes: bytes) -> Tuple[bytes, int]:
-        from core.config import settings
+    async def generate_voice_clone(self, params: TTSParams, ref_audio_bytes: Optional[bytes] = None) -> TTSResult:
+        settings = _get_settings()
+
+        if ref_audio_bytes is None:
+            raise ValueError("ref_audio_bytes is required for Aliyun voice clone")
 
         voice_id = await self._create_voice_clone(ref_audio_bytes)
 
@@ -240,7 +304,7 @@ class AliyunTTSBackend(TTSBackend):
         text: str,
         voice: str,
         language: str
-    ) -> Tuple[bytes, int]:
+    ) -> TTSResult:
         audio_chunks = []
 
         url = f"{self.ws_url}?model={model}"
@@ -284,18 +348,21 @@ class AliyunTTSBackend(TTSBackend):
         return wav_bytes, 24000
 
     async def _create_voice_clone(self, ref_audio_bytes: bytes) -> str:
-        from core.config import settings
+        settings = _get_settings()
         import httpx
 
         audio_b64 = base64.b64encode(ref_audio_bytes).decode()
         data_uri = f"data:audio/wav;base64,{audio_b64}"
+        action = "create"
+        target_model = settings.ALIYUN_MODEL_VC
+        preferred_name = f"clone{int(time.time())}"
 
         payload = {
             "model": "qwen-voice-enrollment",
             "input": {
-                "action": "create",
-                "target_model": settings.ALIYUN_MODEL_VC,
-                "preferred_name": f"clone{int(time.time())}",
+                "action": action,
+                "target_model": target_model,
+                "preferred_name": preferred_name,
                 "audio": {"data": data_uri}
             }
         }
@@ -305,7 +372,7 @@ class AliyunTTSBackend(TTSBackend):
             "Content-Type": "application/json"
         }
 
-        logger.info(f"Voice clone request payload (audio truncated): {{'model': '{payload['model']}', 'input': {{'action': '{payload['input']['action']}', 'target_model': '{payload['input']['target_model']}', 'preferred_name': '{payload['input']['preferred_name']}', 'audio': '<truncated>'}}}}")
+        logger.info(f"Voice clone request payload (audio truncated): {{'model': 'qwen-voice-enrollment', 'input': {{'action': '{action}', 'target_model': '{target_model}', 'preferred_name': '{preferred_name}', 'audio': '<truncated>'}}}}")
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(self.http_url, json=payload, headers=headers, timeout=60)
@@ -319,7 +386,7 @@ class AliyunTTSBackend(TTSBackend):
             return result['output']['voice']
 
     async def _create_voice_design(self, instruct: str, preview_text: str) -> str:
-        from core.config import settings
+        settings = _get_settings()
         import httpx
 
         payload = {
@@ -356,9 +423,9 @@ class AliyunTTSBackend(TTSBackend):
             result = resp.json()
             return result['output']['voice']
 
-    async def health_check(self) -> dict:
+    async def health_check(self) -> HealthStatus:
         try:
-            from core.config import settings
+            settings = _get_settings()
             url = f"{self.ws_url}?model={settings.ALIYUN_MODEL_FLASH}"
             headers = {"Authorization": f"Bearer {self.api_key}"}
 
@@ -433,8 +500,8 @@ class TTSServiceFactory:
     _user_aliyun_backends: dict[str, AliyunTTSBackend] = {}
 
     @classmethod
-    async def get_backend(cls, backend_type: str = None, user_api_key: Optional[str] = None) -> TTSBackend:
-        from core.config import settings
+    async def get_backend(cls, backend_type: Optional[str] = None, user_api_key: Optional[str] = None) -> TTSBackend:
+        settings = _get_settings()
 
         if backend_type is None:
             backend_type = settings.DEFAULT_BACKEND

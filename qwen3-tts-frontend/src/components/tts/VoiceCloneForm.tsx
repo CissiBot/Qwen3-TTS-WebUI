@@ -115,7 +115,7 @@ function VoiceCloneForm() {
     } else if (inputTab === 'upload') {
       setValue('ref_text', '')
     }
-  }, [inputTab, setValue])
+  }, [inputTab, PRESET_REF_TEXTS, setValue])
 
   const handleNextStep = async () => {
     // Validate step 1 fields
@@ -147,7 +147,7 @@ function VoiceCloneForm() {
   const memoizedAudioUrl = useMemo(() => {
     if (!currentJob) return ''
     return jobApi.getAudioUrl(currentJob.id, currentJob.audio_url)
-  }, [currentJob?.id, currentJob?.audio_url])
+  }, [currentJob])
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

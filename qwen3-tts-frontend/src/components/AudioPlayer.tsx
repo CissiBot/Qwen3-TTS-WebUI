@@ -68,7 +68,7 @@ const AudioPlayer = memo(({ audioUrl, jobId }: AudioPlayerProps) => {
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [])
+  }, [blobUrl])
 
   useEffect(() => {
     if (!containerRef.current || !blobUrl) return

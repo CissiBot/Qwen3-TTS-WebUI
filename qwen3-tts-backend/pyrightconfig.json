@@ -1,0 +1,15 @@
+{
+  "include": ["."],
+  "exclude": [
+    "Qwen",
+    "__pycache__"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [".", ".."]
+    }
+  ],
+  "typeCheckingMode": "basic",
+  "reportImplicitRelativeImport": false
+}

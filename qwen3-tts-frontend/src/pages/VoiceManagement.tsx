@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { Trash2, Cpu, Cloud } from 'lucide-react'
@@ -26,7 +26,7 @@ export default function VoiceManagement() {
   const [deleteTarget, setDeleteTarget] = useState<VoiceDesign | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setIsLoading(true)
       const res = await voiceDesignApi.list()
@@ -36,9 +36,9 @@ export default function VoiceManagement() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [t])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const handleDelete = async () => {
     if (!deleteTarget) return

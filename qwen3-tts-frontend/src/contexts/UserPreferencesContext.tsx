@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { authApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import type { UserPreferences } from '@/types/auth'
@@ -23,7 +23,7 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
   const [hasAliyunKey, setHasAliyunKey] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
-  const fetchPreferences = async () => {
+  const fetchPreferences = useCallback(async () => {
     if (!isAuthenticated || !user) {
       const browserLang = detectBrowserLanguage()
       loadFontsForLanguage(browserLang)
@@ -65,11 +65,11 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isAuthenticated, user])
 
   useEffect(() => {
     fetchPreferences()
-  }, [isAuthenticated, user?.id])
+  }, [fetchPreferences])
 
   const updatePreferences = async (partialPrefs: Partial<UserPreferences>) => {
     if (!preferences || !user) return
