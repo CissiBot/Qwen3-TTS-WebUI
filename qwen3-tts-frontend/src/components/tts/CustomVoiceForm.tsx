@@ -381,7 +381,7 @@ const CustomVoiceForm = forwardRef<CustomVoiceFormHandle>((_props, ref) => {
             {t('advancedOptions')}
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] lg:left-[calc(50%+160px)]">
           <DialogHeader>
             <DialogTitle>{t('advancedOptionsTitle')}</DialogTitle>
             <DialogDescription>{t('advancedOptionsDescription')}</DialogDescription>
