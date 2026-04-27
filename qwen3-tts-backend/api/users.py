@@ -5,9 +5,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from api.auth import get_current_user
-from config import settings
 from core.security import get_password_hash
 from db.database import get_db
+from db.models import User as DbUser
 from db.crud import (
     get_user_by_id,
     get_user_by_username,
@@ -17,14 +17,14 @@ from db.crud import (
     update_user,
     delete_user
 )
-from schemas.user import User, UserCreateByAdmin, UserUpdate, UserListResponse
+from schemas.user import User as UserSchema, UserCreateByAdmin, UserUpdate, UserListResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 limiter = Limiter(key_func=get_remote_address)
 
 async def require_superuser(
-    current_user: Annotated[User, Depends(get_current_user)]
-) -> User:
+    current_user: Annotated[DbUser, Depends(get_current_user)]
+) -> DbUser:
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -39,18 +39,19 @@ async def get_users(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser)
+    _: DbUser = Depends(require_superuser)
 ):
     users, total = list_users(db, skip=skip, limit=limit)
-    return UserListResponse(users=users, total=total, skip=skip, limit=limit)
+    user_responses = [UserSchema.model_validate(user) for user in users]
+    return UserListResponse(users=user_responses, total=total, skip=skip, limit=limit)
 
-@router.post("", response_model=User, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
 async def create_user(
     request: Request,
     user_data: UserCreateByAdmin,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser)
+    _: DbUser = Depends(require_superuser)
 ):
     existing_user = get_user_by_username(db, username=user_data.username)
     if existing_user:
@@ -78,21 +79,21 @@ async def create_user(
 
     return user
 
-@router.get("/me", response_model=User)
+@router.get("/me", response_model=UserSchema)
 @limiter.limit("30/minute")
 async def get_current_user_info(
     request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: DbUser = Depends(get_current_user)
 ):
     return current_user
 
-@router.get("/{user_id}", response_model=User)
+@router.get("/{user_id}", response_model=UserSchema)
 @limiter.limit("30/minute")
 async def get_user(
     request: Request,
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser)
+    _: DbUser = Depends(require_superuser)
 ):
     user = get_user_by_id(db, user_id=user_id)
     if not user:
@@ -102,14 +103,14 @@ async def get_user(
         )
     return user
 
-@router.put("/{user_id}", response_model=User)
+@router.put("/{user_id}", response_model=UserSchema)
 @limiter.limit("10/minute")
 async def update_user_info(
     request: Request,
     user_id: int,
     user_data: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_superuser)
+    current_user: DbUser = Depends(require_superuser)
 ):
     existing_user = get_user_by_id(db, user_id=user_id)
     if not existing_user:
@@ -120,7 +121,7 @@ async def update_user_info(
 
     if user_data.username is not None:
         username_exists = get_user_by_username(db, username=user_data.username)
-        if username_exists and username_exists.id != user_id:
+        if username_exists is not None and username_exists.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already taken"
@@ -128,7 +129,7 @@ async def update_user_info(
 
     if user_data.email is not None:
         email_exists = get_user_by_email(db, email=user_data.email)
-        if email_exists and email_exists.id != user_id:
+        if email_exists is not None and email_exists.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already taken"
@@ -163,7 +164,7 @@ async def delete_user_by_id(
     request: Request,
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_superuser)
+    current_user: DbUser = Depends(require_superuser)
 ):
     if user_id == current_user.id:
         raise HTTPException(

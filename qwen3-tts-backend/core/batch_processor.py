@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Optional
 from dataclasses import dataclass
 from collections import deque
 
@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BatchRequest:
     request_id: str
-    data: Dict[str, Any]
-    future: asyncio.Future
+    data: dict[str, Any]
+    future: asyncio.Future[Any]
     timestamp: float
 
 
@@ -22,13 +22,13 @@ class BatchProcessor:
     _instance: Optional['BatchProcessor'] = None
     _lock = asyncio.Lock()
 
-    def __init__(self, batch_size: int = None, batch_wait_time: float = None):
+    def __init__(self, batch_size: int | None = None, batch_wait_time: float | None = None):
         self.batch_size = batch_size or settings.BATCH_SIZE
         self.batch_wait_time = batch_wait_time or settings.BATCH_WAIT_TIME
-        self.queue: deque = deque()
+        self.queue: deque[BatchRequest] = deque()
         self.queue_lock = asyncio.Lock()
         self.processing = False
-        self._processor_task: Optional[asyncio.Task] = None
+        self._processor_task: Optional[asyncio.Task[None]] = None
         logger.info(f"BatchProcessor initialized with batch_size={self.batch_size}, wait_time={self.batch_wait_time}s")
 
     @classmethod
@@ -45,7 +45,7 @@ class BatchProcessor:
             self._processor_task = asyncio.create_task(self._process_batches())
             logger.info("Batch processor task started")
 
-    async def _process_batches(self):
+    async def _process_batches(self) -> None:
         logger.info("Batch processing loop started")
         while True:
             try:
@@ -78,7 +78,7 @@ class BatchProcessor:
                 logger.error(f"Error in batch processor loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _process_batch(self, batch: List[BatchRequest]):
+    async def _process_batch(self, batch: list[BatchRequest]) -> None:
         for request in batch:
             try:
                 if not request.future.done():
@@ -89,11 +89,11 @@ class BatchProcessor:
                 if not request.future.done():
                     request.future.set_exception(e)
 
-    async def _execute_single_request(self, data: Dict[str, Any]) -> Any:
+    async def _execute_single_request(self, data: dict[str, Any]) -> Any:
         raise NotImplementedError("Subclass must implement _execute_single_request")
 
-    async def submit(self, request_id: str, data: Dict[str, Any], timeout: float = 300) -> Any:
-        future = asyncio.Future()
+    async def submit(self, request_id: str, data: dict[str, Any], timeout: float = 300) -> Any:
+        future: asyncio.Future[Any] = asyncio.Future()
         request = BatchRequest(
             request_id=request_id,
             data=data,
@@ -121,7 +121,7 @@ class BatchProcessor:
         async with self.queue_lock:
             return len(self.queue)
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         queue_length = await self.get_queue_length()
         return {
             "queue_length": queue_length,
@@ -133,9 +133,9 @@ class BatchProcessor:
 
 class TTSBatchProcessor(BatchProcessor):
 
-    def __init__(self, process_func: Callable, batch_size: int = None, batch_wait_time: float = None):
+    def __init__(self, process_func: Callable[..., Any], batch_size: int | None = None, batch_wait_time: float | None = None):
         super().__init__(batch_size, batch_wait_time)
         self.process_func = process_func
 
-    async def _execute_single_request(self, data: Dict[str, Any]) -> Any:
+    async def _execute_single_request(self, data: dict[str, Any]) -> Any:
         return await self.process_func(**data)

@@ -15,7 +15,8 @@ from core.security import (
 )
 from db.database import get_db
 from db.crud import get_user_by_username, get_user_by_email, create_user, create_user_by_admin, change_user_password, update_user_aliyun_key, get_user_preferences, update_user_preferences, can_user_use_local_model, update_user_llm_config
-from schemas.user import User, UserCreate, Token, PasswordChange, AliyunKeyUpdate, AliyunKeyVerifyResponse, UserPreferences, UserPreferencesResponse
+from db.models import User as DbUser
+from schemas.user import User as UserSchema, UserCreate, Token, PasswordChange, AliyunKeyUpdate, AliyunKeyVerifyResponse, UserPreferences, UserPreferencesResponse
 from schemas.audiobook import LLMConfigUpdate, LLMConfigResponse
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -56,7 +57,7 @@ def get_or_create_auth_disabled_user(db: Session):
 async def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Session = Depends(get_db)
-) -> User:
+) -> DbUser:
     if settings.AUTH_DISABLED:
         return get_or_create_auth_disabled_user(db)
 
@@ -79,7 +80,7 @@ async def get_current_user(
 
     return user
 
-@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     existing_user = get_user_by_username(db, username=user_data.username)
@@ -134,20 +135,20 @@ async def login(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me", response_model=User)
+@router.get("/me", response_model=UserSchema)
 @limiter.limit("30/minute")
 async def get_current_user_info(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)]
+    current_user: Annotated[DbUser, Depends(get_current_user)]
 ):
     return current_user
 
-@router.post("/change-password", response_model=User)
+@router.post("/change-password", response_model=UserSchema)
 @limiter.limit("5/minute")
 async def change_password(
     request: Request,
     password_data: PasswordChange,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     if not verify_password(password_data.current_password, current_user.hashed_password):
@@ -172,12 +173,12 @@ async def change_password(
 
     return user
 
-@router.post("/aliyun-key", response_model=User)
+@router.post("/aliyun-key", response_model=UserSchema)
 @limiter.limit("5/minute")
 async def set_aliyun_key(
     request: Request,
     key_data: AliyunKeyUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     from core.security import encrypt_api_key
@@ -214,7 +215,7 @@ async def set_aliyun_key(
 @limiter.limit("5/minute")
 async def delete_aliyun_key(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     user = update_user_aliyun_key(
@@ -240,7 +241,7 @@ async def delete_aliyun_key(
 @limiter.limit("10/minute")
 async def verify_aliyun_key(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     from core.security import decrypt_api_key
@@ -278,7 +279,7 @@ async def verify_aliyun_key(
 @limiter.limit("30/minute")
 async def get_preferences(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     prefs = get_user_preferences(db, current_user.id)
@@ -298,7 +299,7 @@ async def get_preferences(
 async def update_preferences(
     request: Request,
     preferences: UserPreferences,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     if preferences.default_backend == "local":
@@ -328,7 +329,7 @@ async def update_preferences(
 async def set_llm_config(
     request: Request,
     config: LLMConfigUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     from core.security import encrypt_api_key
@@ -363,7 +364,7 @@ async def set_llm_config(
 @limiter.limit("30/minute")
 async def get_llm_config(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
 ):
     return LLMConfigResponse(
         base_url=current_user.llm_base_url,
@@ -376,7 +377,7 @@ async def get_llm_config(
 @limiter.limit("10/minute")
 async def delete_llm_config(
     request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[DbUser, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
     update_user_llm_config(db, user_id=current_user.id, clear=True)

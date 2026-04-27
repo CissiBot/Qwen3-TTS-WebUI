@@ -61,11 +61,16 @@ class TTSBackend(ABC):
         pass
 
     @abstractmethod
-    async def generate_voice_design(self, params: TTSParams) -> TTSResult:
+    async def generate_voice_design(self, params: TTSParams, saved_voice_id: Optional[str] = None) -> TTSResult:
         pass
 
     @abstractmethod
-    async def generate_voice_clone(self, params: TTSParams, ref_audio_bytes: Optional[bytes] = None) -> TTSResult:
+    async def generate_voice_clone(
+        self,
+        params: TTSParams,
+        ref_audio_bytes: Optional[bytes] = None,
+        x_vector: Any = None,
+    ) -> TTSResult:
         pass
 
     @abstractmethod
@@ -117,7 +122,7 @@ class LocalTTSBackend(TTSBackend):
         audio_data = wavs[0] if isinstance(wavs, list) else wavs
         return self._numpy_to_bytes(audio_data), sample_rate
 
-    async def generate_voice_design(self, params: TTSParams) -> TTSResult:
+    async def generate_voice_design(self, params: TTSParams, saved_voice_id: Optional[str] = None) -> TTSResult:
         model_manager = self._require_model_manager()
         await model_manager.load_model("voice-design")
         _, tts = await model_manager.get_current_model()
@@ -281,7 +286,12 @@ class AliyunTTSBackend(TTSBackend):
             language=params['language']
         )
 
-    async def generate_voice_clone(self, params: TTSParams, ref_audio_bytes: Optional[bytes] = None) -> TTSResult:
+    async def generate_voice_clone(
+        self,
+        params: TTSParams,
+        ref_audio_bytes: Optional[bytes] = None,
+        x_vector: Any = None,
+    ) -> TTSResult:
         settings = _get_settings()
 
         if ref_audio_bytes is None:

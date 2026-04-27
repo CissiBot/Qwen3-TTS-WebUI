@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -118,7 +118,7 @@ class LLMService:
             logger.error(f"JSON parse failed. Raw response (first 500 chars): {raw[:500]}")
             raise
 
-    async def extract_characters(self, text_samples: list[str], on_token=None, on_sample=None, turbo: bool = False) -> list[Dict]:
+    async def extract_characters(self, text_samples: list[str], on_token=None, on_sample=None, turbo: bool = False) -> list[dict[str, Any]]:
         system_prompt = (
             "你是一个专业的小说分析助手兼声音导演。请分析给定的小说文本，提取所有出现的角色（包括旁白narrator）。\n"
             "gender字段必须明确标注性别，只能取以下三个值之一：\"男\"、\"女\"、\"未知\"。\n"
@@ -137,7 +137,7 @@ class LLMService:
         if turbo and len(text_samples) > 1:
             logger.info(f"Extracting characters in turbo mode: {len(text_samples)} samples concurrent")
 
-            async def _extract_one(i: int, sample: str) -> list[Dict]:
+            async def _extract_one(i: int, sample: str) -> list[dict[str, Any]]:
                 user_message = f"请分析以下小说文本并提取角色：\n\n{sample}"
                 result = await self.stream_chat_json(system_prompt, user_message, None)
                 if on_sample:
@@ -148,15 +148,17 @@ class LLMService:
                 *[_extract_one(i, s) for i, s in enumerate(text_samples)],
                 return_exceptions=True,
             )
-            raw_all: list[Dict] = []
+            turbo_raw_all: list[dict[str, Any]] = []
             for i, r in enumerate(results):
-                if isinstance(r, Exception):
+                if isinstance(r, BaseException):
                     logger.warning(f"Character extraction failed for sample {i+1}: {r}")
+                elif isinstance(r, list):
+                    turbo_raw_all.extend(r)
                 else:
-                    raw_all.extend(r)
-            return await self.merge_characters(raw_all)
+                    logger.warning(f"Character extraction returned unexpected result for sample {i+1}: {type(r).__name__}")
+            return await self.merge_characters(turbo_raw_all)
 
-        raw_all: list[Dict] = []
+        raw_all: list[dict[str, Any]] = []
         for i, sample in enumerate(text_samples):
             logger.info(f"Extracting characters from sample {i+1}/{len(text_samples)}")
             user_message = f"请分析以下小说文本并提取角色：\n\n{sample}"
@@ -171,7 +173,7 @@ class LLMService:
             return raw_all
         return await self.merge_characters(raw_all)
 
-    async def merge_characters(self, raw_characters: list[Dict]) -> list[Dict]:
+    async def merge_characters(self, raw_characters: list[dict[str, Any]]) -> list[dict[str, Any]]:
         system_prompt = (
             "你是一个专业的小说角色整合助手。你收到的是从同一本书不同段落中提取的角色列表，其中可能存在重复。\n"
             "请完成以下任务：\n"
@@ -189,14 +191,14 @@ class LLMService:
             return result.get("characters", [])
         except Exception as e:
             logger.warning(f"Character merge failed, falling back to name-dedup: {e}")
-            seen: dict[str, Dict] = {}
+            seen: dict[str, dict[str, Any]] = {}
             for c in raw_characters:
                 name = c.get("name", "")
                 if name and name not in seen:
                     seen[name] = c
             return list(seen.values())
 
-    async def parse_chapter_segments(self, chapter_text: str, character_names: list[str], on_token=None) -> list[Dict]:
+    async def parse_chapter_segments(self, chapter_text: str, character_names: list[str], on_token=None) -> list[dict[str, Any]]:
         names_str = "、".join(character_names)
         system_prompt = (
             "你是一个专业的有声书制作助手。请将给定的章节文本解析为对话片段列表。"

@@ -17,7 +17,7 @@ from core.model_manager import ModelManager
 from core.cleanup import run_scheduled_cleanup
 from api import auth, jobs, tts, users, voice_designs, audiobook
 from api.auth import get_current_user
-from schemas.user import User
+from db.models import User as DbUser
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(
@@ -158,7 +158,7 @@ async def health_check():
 
 
 @app.get("/health/details")
-async def health_check_details(current_user: User = Depends(get_current_user)):
+async def health_check_details(current_user: DbUser = Depends(get_current_user)):
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser access required")
 

@@ -210,8 +210,9 @@ async def process_voice_clone_job(
 
         cache_manager = await VoiceCacheManager.get_instance()
 
-        voice_design_id = request_data.get('voice_design_id')
-        if voice_design_id:
+        raw_voice_design_id = request_data.get('voice_design_id')
+        voice_design_id = raw_voice_design_id if isinstance(raw_voice_design_id, int) else None
+        if voice_design_id is not None:
             from db.crud import get_voice_design
             design = get_voice_design(db, voice_design_id, user_id)
             if not design or not design.voice_cache_id:
@@ -234,8 +235,10 @@ async def process_voice_clone_job(
             x_vector = None
             cache_id = None
 
-            if voice_design_id:
+            if voice_design_id is not None:
                 design = get_voice_design(db, voice_design_id, user_id)
+                if not design or not design.voice_cache_id:
+                    raise RuntimeError(f"Voice design {voice_design_id} has no prepared clone prompt")
                 x_vector = cached['data']
                 cache_id = design.voice_cache_id
             elif request_data.get('use_cache', True):
@@ -286,10 +289,14 @@ async def process_voice_clone_job(
 
         backend = await TTSServiceFactory.get_backend(backend_type, user_api_key)
 
-        if voice_design_id and backend_type == "local":
+        if voice_design_id is not None and backend_type == "local":
             from db.crud import get_voice_design
             design = get_voice_design(db, voice_design_id, user_id)
+            if not design or not design.voice_cache_id:
+                raise RuntimeError(f"Voice design {voice_design_id} has no prepared clone prompt")
             cached = await cache_manager.get_cache_by_id(design.voice_cache_id, db)
+            if not cached:
+                raise RuntimeError(f"Cache {design.voice_cache_id} not found")
             x_vector = cached['data']
             audio_bytes, sample_rate = await backend.generate_voice_clone(request_data, x_vector=x_vector)
             logger.info(f"Generated audio using cached x_vector from voice design {voice_design_id}")
@@ -542,7 +549,7 @@ async def create_voice_clone_job(
     top_p: Optional[float] = Form(default=1.0),
     repetition_penalty: Optional[float] = Form(default=1.05),
     backend: Optional[str] = Form(default=None),
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -554,7 +561,10 @@ async def create_voice_clone_job(
 
     can_use_local = can_user_use_local_model(current_user)
 
-    backend_type = backend if backend else preferred_backend
+    backend_type = backend or str(preferred_backend)
+
+    if background_tasks is None:
+        raise HTTPException(status_code=500, detail="Background task handler is unavailable")
 
     if backend_type == "local" and not can_use_local:
         raise HTTPException(
@@ -641,9 +651,15 @@ async def create_voice_clone_job(
     db.refresh(job)
 
     if use_voice_design:
+        if voice_design_id is None:
+            raise HTTPException(status_code=400, detail="Voice design id is required")
         design = get_voice_design(db, voice_design_id, current_user.id)
+        if not design or not design.ref_audio_path:
+            raise HTTPException(status_code=404, detail="Voice design reference audio not found")
         tmp_audio_path = design.ref_audio_path
     else:
+        if ref_audio_data is None:
+            raise HTTPException(status_code=400, detail="Reference audio is required")
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
             tmp_file.write(ref_audio_data)
             tmp_audio_path = tmp_file.name
@@ -682,7 +698,7 @@ async def create_voice_clone_job(
 
 @router.get("/speakers")
 @limiter.limit("30/minute")
-async def list_speakers(request: Request, backend: Optional[str] = "local"):
+async def list_speakers(request: Request, backend: str = "local"):
     return get_supported_speakers(backend)
 
 

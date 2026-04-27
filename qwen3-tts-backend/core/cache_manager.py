@@ -124,8 +124,9 @@ class VoiceCacheManager:
         cache_data: Any,
         metadata: Dict[str, Any],
         db: Session
-    ) -> str:
+    ) -> int:
         async with self._lock:
+            cache_path: Optional[Path] = None
             try:
                 if hasattr(cache_data, "detach"):
                     cache_data = cache_data.detach().cpu().numpy()
@@ -156,7 +157,7 @@ class VoiceCacheManager:
 
             except Exception as e:
                 logger.error(f"Cache creation error: {e}", exc_info=True)
-                if cache_path.exists():
+                if cache_path is not None and cache_path.exists():
                     cache_path.unlink()
                 raise
 
